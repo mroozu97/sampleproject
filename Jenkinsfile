@@ -3,10 +3,14 @@ pipeline {
 
   options {
     timestamps()
+    disableConcurrentBuilds()
   }
 
   environment {
-    IMAGE_NAME = "sampleproject-ci"
+    IMAGE_DEPS   = "sampleproject-deps:${BUILD_NUMBER}"
+    IMAGE_BUILDER= "sampleproject-builder:${BUILD_NUMBER}"
+    IMAGE_TESTER = "sampleproject-tester:${BUILD_NUMBER}"
+    LOG_DIR      = "ci-logs"
   }
 
   stages {
@@ -16,24 +20,42 @@ pipeline {
       }
     }
 
-    stage('Build (container-based)') {
+    stage('Build images (Dependencies -> Builder -> Tester)') {
       steps {
         sh '''
           set -euxo pipefail
-          mkdir -p ci-logs
-          echo "==> Building Docker image ${IMAGE_NAME}:${BUILD_NUMBER}"
-          docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} . | tee ci-logs/build-${BUILD_NUMBER}.log
+          mkdir -p "${LOG_DIR}"
+
+          echo "==> Build Dependencies image: ${IMAGE_DEPS}"
+          docker build --pull --no-cache \
+            --target dependencies \
+            -t "${IMAGE_DEPS}" \
+            -f ci/Dockerfile.ci . | tee "${LOG_DIR}/01-deps-build-${BUILD_NUMBER}.log"
+
+          echo "==> Build Builder image (FROM Dependencies): ${IMAGE_BUILDER}"
+          docker build --no-cache \
+            --target builder \
+            -t "${IMAGE_BUILDER}" \
+            -f ci/Dockerfile.ci . | tee "${LOG_DIR}/02-builder-build-${BUILD_NUMBER}.log"
+
+          echo "==> Build Tester image (FROM Builder): ${IMAGE_TESTER}"
+          docker build --no-cache \
+            --target tester \
+            -t "${IMAGE_TESTER}" \
+            -f ci/Dockerfile.ci . | tee "${LOG_DIR}/03-tester-build-${BUILD_NUMBER}.log"
         '''
       }
     }
 
-    stage('Test (container based on build)') {
+    stage('Test (inside Tester container)') {
       steps {
         sh '''
           set -euxo pipefail
-          echo "==> Running tests inside container ${IMAGE_NAME}:${BUILD_NUMBER}"
-          # nie nadpisujemy CMD jeśli nie trzeba — ale i tak wywołamy python -m pytest dla pewności
-          docker run --rm ${IMAGE_NAME}:${BUILD_NUMBER} python -m pytest | tee ci-logs/test-${BUILD_NUMBER}.log
+
+          echo "==> Running pytest inside ${IMAGE_TESTER}"
+          # -T: bez pseudo-TTY, żeby log był czysty
+          docker run --rm "${IMAGE_TESTER}" python -m pytest -vv \
+            | tee "${LOG_DIR}/04-pytest-${BUILD_NUMBER}.log"
         '''
       }
     }
@@ -44,8 +66,8 @@ pipeline {
       archiveArtifacts artifacts: 'ci-logs/*.log', fingerprint: true
       sh '''
         set +e
-        docker rmi -f ${IMAGE_NAME}:${BUILD_NUMBER} || true
-        docker system prune -af || true
+        docker rmi -f "${IMAGE_TESTER}" "${IMAGE_BUILDER}" "${IMAGE_DEPS}"
+        docker system prune -af
       '''
     }
   }
