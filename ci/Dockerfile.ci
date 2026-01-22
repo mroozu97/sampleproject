@@ -1,0 +1,26 @@
+# 1) Dependencies – bazowy obraz z zależnościami (pin wersji, nie latest)
+FROM python:3.12.12-slim AS dependencies
+WORKDIR /app
+
+# narzędzia do build/test
+RUN pip install -U pip setuptools wheel build pytest
+
+# 2) Builder – bazuje na Dependencies, buduje paczkę
+FROM dependencies AS builder
+WORKDIR /app
+COPY pyproject.toml ./
+COPY src ./src
+COPY tests ./tests
+
+# instalacja projektu + zależności testowe (z pyproject extras)
+RUN pip install ".[test]"
+
+# opcjonalnie: budowa artefaktów pakietu (wheel/sdist)
+RUN python -m build
+
+# 3) Tester – bazuje na Builder (wymóg: tester oparty o build)
+FROM builder AS tester
+WORKDIR /app
+
+# domyślny entrypoint do testów (ale w Jenkins i tak uruchomimy python -m pytest dla pewności)
+CMD ["python", "-m", "pytest", "-q"]
