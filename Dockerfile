@@ -7,6 +7,7 @@ COPY src ./src
 COPY tests ./tests
 
 RUN pip install -U pip setuptools wheel \
- && pip install .[test]
+ && pip install ".[test]" \
+ && pip install pytest
 
-CMD ["pytest"]
+CMD ["python", "-m", "pytest"]
