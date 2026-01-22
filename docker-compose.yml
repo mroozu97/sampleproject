@@ -1,0 +1,40 @@
+services:
+  docker:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - docker-certs:/certs/client
+      - jenkins-docker:/var/lib/docker
+    networks:
+      - jenkins
+    restart: unless-stopped
+
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - docker-certs:/certs/client:ro
+    networks:
+      - jenkins
+    restart: unless-stopped
+    depends_on:
+      - docker
+
+volumes:
+  jenkins-home:
+  jenkins-docker:
+  docker-certs:
+
+networks:
+  jenkins:
