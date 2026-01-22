@@ -23,16 +23,16 @@ pipeline {
         }
 
         stage('Test (container based on build)') {
-            steps {
-                sh '''
-                    set -eux
+    steps {
+        sh '''
+            set -eux
+            echo "==> Running tests inside container"
+            docker run --rm sampleproject-ci:${BUILD_NUMBER} pytest \
+              | tee ci-logs/test-${BUILD_NUMBER}.log
+        '''
+    }
+}
 
-                    echo "==> Running tests inside container"
-                    docker run --rm sampleproject-ci:${BUILD_NUMBER} \
-                        | tee ci-logs/test-${BUILD_NUMBER}.log
-                '''
-            }
-        }
     }
 
     post {
