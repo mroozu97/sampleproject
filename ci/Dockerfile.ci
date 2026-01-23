@@ -24,3 +24,18 @@ WORKDIR /app
 
 # domyślny entrypoint do testów (ale w Jenkins i tak uruchomimy python -m pytest dla pewności)
 CMD ["python", "-m", "pytest", "-q"]
+
+# 4) Deploy – kontener runtime do uruchomienia aplikacji
+# nie zawiera pytest/build/toolingu
+FROM python:3.12.12-slim AS deploy
+WORKDIR /app
+
+# kopiujemy WYŁĄCZNIE zbudowany artefakt z buildera
+COPY --from=builder /app/dist/*.whl /tmp/app.whl
+
+# instalacja artefaktu runtime
+RUN pip install /tmp/app.whl && rm -f /tmp/app.whl
+
+# prosta komenda uruchomieniowa (smoke test / runtime)
+CMD ["python", "-c", "import sample; print('Application runtime OK')"]
+
